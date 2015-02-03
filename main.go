@@ -1,29 +1,24 @@
 package main
 
 import (
-	"log"
+	"errors"
 	"fmt"
 	irc "github.com/fluffle/goirc/client"
 	"github.com/nu7hatch/gouuid"
 	"html/template"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
-	"errors"
-	"github.com/gophergala/cheppirc/theme"
+	//"github.com/gophergala/cheppirc/theme"
+	"github.com/gophergala/cheppirc/session"
+	//"github.com/gophergala/cheppirc/target"
 	"github.com/gorilla/websocket"
 )
 
 type SessionList struct {
-	Sessions map[string]Session
-}
-
-type Session struct {
-	Uuid string
-	C *irc.Conn
-	Data *theme.ThemeData
-	Updater chan []byte
+	Sessions map[string]session.Session
 }
 
 type chatHandler struct {
@@ -39,12 +34,12 @@ type connectHandler struct {
 
 type wsHandler struct {
 	sessionList *SessionList
-	WsClose chan bool
+	WsClose     chan bool
 }
 
 type sendHandler struct {
 	sessionList *SessionList
-	WsClose chan bool
+	WsClose     chan bool
 }
 
 var upgrader = websocket.Upgrader{
@@ -65,9 +60,9 @@ func (c *chatHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	t := template.Must(template.ParseFiles("templates/chat.html"))
-	session.Data.RLock()
-	t.Execute(w, session.Data)
-	session.Data.RUnlock()
+	session.RLock()
+	t.Execute(w, session)
+	session.RUnlock()
 
 	//w.Write([]byte("Hello IRC"))
 	//w.Write(data)
@@ -162,7 +157,7 @@ func (s *sendHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		log.Println("DEBUG READ:", messageType, " -- ", string(p))
 		data := strings.Split(string(p), "||")
 		session.C.Privmsg(data[0], data[1])
-		session.Data.AddMessage(data[0], session.Data.Nick, data[1], "self", session.Updater)
+		session.AddMessage(data[0], session.Nick, data[1], "self", session.Updater)
 	}
 }
 
@@ -191,7 +186,7 @@ func newSendHandler(s *SessionList, wsClose chan bool) *sendHandler {
 	return w
 }
 
-func newSession(nick, channel, server, port string) (*Session, error) {
+func newSession(nick, channel, server, port string) (*session.Session, error) {
 	cfg := irc.NewConfig(nick)
 	cfg.SSL = false
 	cfg.Server = server + ":" + port
@@ -200,41 +195,39 @@ func newSession(nick, channel, server, port string) (*Session, error) {
 
 	log.Println(c.String())
 	id, _ := uuid.NewV4()
-	u := make(chan []byte, 25)
-	session := &Session{id.String(), c, nil, u}
-	session.Data = theme.NewThemeData()
-	session.Data.Uuid = session.Uuid
-	session.Data.Nick = nick
+	session := &session.Session{}
+	session.Uuid = id.String()
+	session.C = c
+	session.Updater = make(chan []byte, 25)
 	log.Println("\nUUID:", id.String())
 	log.Println("\nCFG:", cfg)
-	session.Data.AddMessage(channel, "", "Connecting to " + channel, "status", session.Updater)
+	session.AddMessage(channel, "", "Connecting to "+channel, "status", session.Updater)
 
 	c.HandleFunc("connected",
-		func(conn *irc.Conn, line *irc.Line) { 
+		func(conn *irc.Conn, line *irc.Line) {
 			log.Println("Connected to", line.Raw)
 			conn.Join(channel)
-			session.Data.AddMessage(channel, "", "Now talking on " + channel, "status", session.Updater)
+			session.AddMessage(channel, "", "Now talking on "+channel, "status", session.Updater)
 			conn.Who(channel)
 		})
 
 	c.HandleFunc("privmsg",
-		func(conn *irc.Conn, line *irc.Line) { 
+		func(conn *irc.Conn, line *irc.Line) {
 			log.Println("PRIVMSG - Raw:", line.Raw, "Nick:", line.Nick, "Src:", line.Src, "Args:", line.Args, "time:", line.Time)
-			session.Data.AddMessage(line.Args[0], line.Nick, line.Args[1], "user", session.Updater)
+			session.AddMessage(line.Args[0], line.Nick, line.Args[1], "user", session.Updater)
 		})
 
 	c.HandleFunc("352",
 		func(conn *irc.Conn, line *irc.Line) {
 			log.Println("352 - RAW:", line.Raw)
-			session.Data.SetUsers(line.Args[1], line.Args[5], line.Args[3] + " " + line.Args[4])
+			session.SetUsers(line.Args[1], line.Args[5], line.Args[3]+" "+line.Args[4])
 		})
 
 	c.HandleFunc("315",
 		func(conn *irc.Conn, line *irc.Line) {
 			log.Println("315 - RAW:", line.Raw)
-			session.Data.AddMessage(line.Args[1], "", "reload", "hidden", session.Updater)
+			session.AddMessage(line.Args[1], "", "reload", "hidden", session.Updater)
 		})
-
 
 	if err := c.Connect(); err != nil {
 		return nil, errors.New("Connection error: " + err.Error())
@@ -243,7 +236,7 @@ func newSession(nick, channel, server, port string) (*Session, error) {
 	return session, nil
 }
 
-func getSession(values url.Values, sessionList *SessionList) *Session {
+func getSession(values url.Values, sessionList *SessionList) *session.Session {
 	uuid := values.Get("session")
 	if len(uuid) < 1 {
 		return nil
@@ -259,7 +252,7 @@ func getSession(values url.Values, sessionList *SessionList) *Session {
 func main() {
 	log.Println("Starting up server...")
 	sessionList := new(SessionList)
-	sessionList.Sessions = make(map[string]Session)
+	sessionList.Sessions = make(map[string]session.Session)
 
 	closeWs := make(chan bool)
 
