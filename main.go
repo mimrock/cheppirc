@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 	//"github.com/gophergala/cheppirc/theme"
-	"github.com/gophergala/cheppirc/session"
+	"github.com/mimrock/cheppirc/session"
 	//"github.com/gophergala/cheppirc/target"
 	"github.com/gorilla/websocket"
 )
