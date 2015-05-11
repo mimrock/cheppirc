@@ -1,7 +1,7 @@
 package target
 
 import (
-	"github.com/gophergala/cheppirc/message"
+	"github.com/mimrock/cheppirc/message"
 	"strings"
 )
 

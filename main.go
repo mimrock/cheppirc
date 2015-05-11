@@ -12,7 +12,7 @@ import (
 	"strconv"
 	"strings"
 	//"github.com/gophergala/cheppirc/theme"
-	"github.com/gophergala/cheppirc/session"
+	"github.com/mimrock/cheppirc/session"
 	//"github.com/gophergala/cheppirc/target"
 	"github.com/gorilla/websocket"
 )
@@ -262,7 +262,11 @@ func main() {
 	mux.Handle("/chat", newChatHandler(sessionList))
 	mux.Handle("/login", newLoginHandler())
 	mux.Handle("/connect", newConnectHandler(sessionList))
-
+	
+	// Make the css and js files available in subdirectories
+	mux.Handle("/css/", http.StripPrefix("/css/", http.FileServer(http.Dir("css"))))	
+	mux.Handle("/js/", http.StripPrefix("/js/", http.FileServer(http.Dir("js"))))	
+	
 	log.Println("Listening...")
 
 	http.ListenAndServe(":"+strconv.Itoa(8081), mux)

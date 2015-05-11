@@ -3,9 +3,9 @@ package session
 import (
 	"encoding/json"
 	irc "github.com/fluffle/goirc/client"
-	"github.com/gophergala/cheppirc/message"
-	"github.com/gophergala/cheppirc/target"
-	"github.com/gophergala/cheppirc/user"
+	"github.com/mimrock/cheppirc/message"
+	"github.com/mimrock/cheppirc/target"
+	"github.com/mimrock/cheppirc/user"
 	"log"
 	"sync"
 )
